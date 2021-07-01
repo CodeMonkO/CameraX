@@ -31,6 +31,18 @@ public class XCameraActivity extends AppCompatActivity {
                 }
             }
         });
+
+        Button textureCamera = findViewById(R.id.textureCamera);
+        textureCamera.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (hasCameraPermission()) {
+                    textureCamera();
+                } else {
+                    requestPermission();
+                }
+            }
+        });
     }
 
     private boolean hasCameraPermission() {
@@ -50,6 +62,11 @@ public class XCameraActivity extends AppCompatActivity {
 
     private void enableCamera() {
         Intent intent = new Intent(this, CameraActivity.class);
+        startActivity(intent);
+    }
+
+    private void textureCamera() {
+        Intent intent = new Intent(this, TextureActivity.class);
         startActivity(intent);
     }
 }
