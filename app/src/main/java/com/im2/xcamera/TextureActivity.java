@@ -4,9 +4,13 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.FocusMeteringAction;
+import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
+import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.Preview;
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -33,6 +37,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class TextureActivity extends AppCompatActivity implements SurfaceHolder.Callback {
 
@@ -46,6 +51,7 @@ public class TextureActivity extends AppCompatActivity implements SurfaceHolder.
 
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
     private ExecutorService executor = Executors.newSingleThreadExecutor();
+    private Camera camera;
 
     /**
      *Responsible for converting the rotation degrees from CameraX into the one compatible with Firebase ML
@@ -70,6 +76,7 @@ public class TextureActivity extends AppCompatActivity implements SurfaceHolder.
                 try {
                     ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
                     bindPreview(cameraProvider);
+                    adjustCameraFocus1();
                 } catch (ExecutionException | InterruptedException e) {
                     // No errors need to be handled for this Future.
                     // This should never be reached.
@@ -106,48 +113,30 @@ public class TextureActivity extends AppCompatActivity implements SurfaceHolder.
             @Override
             public void analyze(@NonNull ImageProxy image) {
                 //changing normal degrees into Firebase rotation
-                int rotationDegrees = degreesToFirebaseRotation(image.getImageInfo().getRotationDegrees());
-                if (image == null || image.getImage() == null) {
-                    return;
-                }
-                //Getting a FirebaseVisionImage object using the Image object and rotationDegrees
-                final Image mediaImage = image.getImage();
-                //FirebaseVisionImage images = FirebaseVisionImage.fromMediaImage(mediaImage, rotationDegrees);
-                //Getting bitmap from FirebaseVisionImage Object
-                //Bitmap bmp=images.getBitmap();
-                //Getting the values for cropping
-                DisplayMetrics displaymetrics = new DisplayMetrics();
-                getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
-                int height = mediaImage.getHeight();
-                int width = mediaImage.getWidth();
 
-                int left, right, top, bottom, diameter;
-
-                diameter = width;
-                if (height < width) {
-                    diameter = height;
-                }
-
-                int offset = (int) (0.05 * diameter);
-                diameter -= offset;
-
-
-                left = width / 2 - diameter / 3;
-                top = height / 2 - diameter / 3;
-                right = width / 2 + diameter / 3;
-                bottom = height / 2 + diameter / 3;
-
-                xOffset = left;
-                yOffset = top;
-
-                //Creating new cropped bitmap
-                //Bitmap bitmap = Bitmap.createBitmap(mediaImage, left, top, boxWidth, boxHeight);
-                //initializing FirebaseVisionTextRecognizer object
             }
 
 
         });
-        Camera camera = cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, imageAnalysis,preview);
+        camera = cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, imageAnalysis,preview);
+    }
+
+    private void adjustCameraFocus1() {
+        float x = mCameraView.getWidth()/2;
+        float y = (mCameraView.getHeight() - mCameraView.getHeight()/4);
+        MeteringPoint meteringPoint1 = new SurfaceOrientedMeteringPointFactory(mCameraView.getWidth(), mCameraView.getHeight()).createPoint(x, y);
+        FocusMeteringAction action = new FocusMeteringAction.Builder(meteringPoint1, FocusMeteringAction.FLAG_AF).setAutoCancelDuration(2, TimeUnit.SECONDS)
+                .build();
+        ListenableFuture<FocusMeteringResult> focusMeteringResultListenableFuture = camera.getCameraControl().startFocusAndMetering(action);
+
+        focusMeteringResultListenableFuture.addListener(() -> {
+            try {
+                FocusMeteringResult result = focusMeteringResultListenableFuture.get();
+                Log.d("isFocusSuccessful", ""+result.isFocusSuccessful());
+                // process the result
+            } catch (Exception e) {
+            }
+        } , ContextCompat.getMainExecutor(this));
     }
 
 

@@ -2,10 +2,12 @@ package com.im2.xcamera;
 
 import android.animation.Animator;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
@@ -23,6 +25,7 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.DisplayOrientedMeteringPointFactory;
 import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.ImageAnalysis;
@@ -30,6 +33,7 @@ import androidx.camera.core.ImageProxy;
 import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -45,6 +49,7 @@ import android.view.ScaleGestureDetector;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -70,10 +75,12 @@ public class CameraActivity extends AppCompatActivity implements SurfaceHolder.C
     Canvas canvas;
     Paint paint;
     int cameraHeight, cameraWidth, xOffset, yOffset, boxWidth, boxHeight;
+    Activity activity;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        activity = this;
         setContentView(R.layout.activity_camera);
         previewView = findViewById(R.id.previewView);
 
@@ -92,8 +99,17 @@ public class CameraActivity extends AppCompatActivity implements SurfaceHolder.C
                 try {
                     ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
                     bindImageAnalysis(cameraProvider);
+                    previewView.getPreviewStreamState().observe((LifecycleOwner) activity, value -> {
+                        Log.d("CameraX", String.valueOf(value));
+                        if(value.toString().equals("STREAMING")){
+                            Log.d("CameraX", String.valueOf(value));
+                            //adjustCameraFocus();
+                            //adjustCameraFocus();
+                            //adjustCameraFocus1();
+                            adjustCameraFocus2();
+                        }
+                    });
                     //getTouchCoord();
-                    adjustCameraFocus();
                     System.out.println("Finished");
                 } catch (ExecutionException | InterruptedException e) {
                     e.printStackTrace();
@@ -102,64 +118,32 @@ public class CameraActivity extends AppCompatActivity implements SurfaceHolder.C
         }, ContextCompat.getMainExecutor(this));
     }
 
+    @SuppressLint("UnsafeExperimentalUsageError")
     private void bindImageAnalysis(@NonNull ProcessCameraProvider cameraProvider) {
         ImageAnalysis imageAnalysis =
-                new ImageAnalysis.Builder().setTargetResolution(new Size(720, 720))
+                new ImageAnalysis.Builder().setTargetResolution(new Size(1920, 720))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build();
+
         imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(this), new ImageAnalysis.Analyzer() {
             @SuppressLint("UnsafeExperimentalUsageError")
             @Override
             public void analyze(@NonNull ImageProxy image) {
-                //changing normal degrees into Firebase rotation
-                //int rotationDegrees = degreesToFirebaseRotation(image.getImageInfo().getRotationDegrees());
-                if (image == null || image.getImage() == null) {
-                    return;
-                }
-                //Getting a FirebaseVisionImage object using the Image object and rotationDegrees
-                final Image mediaImage = image.getImage();
-                //FirebaseVisionImage images = FirebaseVisionImage.fromMediaImage(mediaImage, rotationDegrees);
-                //Getting bitmap from FirebaseVisionImage Object
-                //Bitmap bmp=images.getBitmap();
-                //Getting the values for cropping
-                DisplayMetrics displaymetrics = new DisplayMetrics();
-                getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
-                int height = mediaImage.getHeight();
-                int width = mediaImage.getWidth();
 
-                int left, right, top, bottom, diameter;
-
-                diameter = width;
-                if (height < width) {
-                    diameter = height;
-                }
-
-                int offset = (int) (0.05 * diameter);
-                diameter -= offset;
-
-
-                left = width / 2 - diameter / 3;
-                top = height / 2 - diameter / 3;
-                right = width / 2 + diameter / 3;
-                bottom = height / 2 + diameter / 3;
-
-                xOffset = left;
-                yOffset = top;
-
-                //Creating new cropped bitmap
-                //Bitmap bitmap = Bitmap.createBitmap(mediaImage, left, top, boxWidth, boxHeight);
-                //initializing FirebaseVisionTextRecognizer object
+                image.close();
             }
         });
+
         OrientationEventListener orientationEventListener = new OrientationEventListener(this) {
             @Override
             public void onOrientationChanged(int orientation) {
                 //updateTransform(orientation);
+
             }
         };
         orientationEventListener.enable();
         Preview preview = new Preview.Builder().build();
         CameraSelector cameraSelector = new CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_FRONT).build();
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK).build();
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
         camera =  cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector,
                 imageAnalysis, preview);
@@ -195,30 +179,12 @@ public class CameraActivity extends AppCompatActivity implements SurfaceHolder.C
         return true;
     }
 
-    private void adjustCameraFocus() {
-        Log.d("adjustCameraFocus ", "adjustCameraFocus");
-        long downTime = SystemClock.uptimeMillis();
-        long eventTime = SystemClock.uptimeMillis() + 100;
-
-        DisplayMetrics displayMetrics = new DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
-        int height = displayMetrics.heightPixels;
-        int width = displayMetrics.widthPixels;
-
-        Log.d("---", "height "+ height + "height Trans "+height/3 + "width "+ width + "width Trans "+ width/2);
-
-        float x = width/2;
-        float y = (height - height/4);
-
-        Log.d("---", "X "+ x + "Y "+y);
-        int metaState = 0;
-        MotionEvent event = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, x, y, metaState);
-        MeteringPointFactory meteringPointFactory = previewView.getMeteringPointFactory();
-        MeteringPoint meteringPoint1 = meteringPointFactory.createPoint(event.getX(), event.getY());
-        FocusMeteringAction action = new FocusMeteringAction.Builder(meteringPoint1, FocusMeteringAction.FLAG_AE).setAutoCancelDuration(2, TimeUnit.SECONDS)
+    private void adjustCameraFocus1() {
+        float x = previewView.getWidth()/2;
+        float y = (previewView.getHeight() - previewView.getHeight()/4);
+        MeteringPoint meteringPoint1 = new SurfaceOrientedMeteringPointFactory(previewView.getWidth(), previewView.getHeight()).createPoint(x, y);
+        FocusMeteringAction action = new FocusMeteringAction.Builder(meteringPoint1, FocusMeteringAction.FLAG_AF).setAutoCancelDuration(2, TimeUnit.SECONDS)
                 .build();
-        float zoomR = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getZoomRatio();
-        camera.getCameraControl().setZoomRatio(zoomR * 1.2f);
         focusMeteringResultListenableFuture = camera.getCameraControl().startFocusAndMetering(action);
 
         focusMeteringResultListenableFuture.addListener(() -> {
@@ -229,7 +195,82 @@ public class CameraActivity extends AppCompatActivity implements SurfaceHolder.C
             } catch (Exception e) {
             }
         } , ContextCompat.getMainExecutor(this));
+    }
+
+    private void adjustCameraFocus() {
+        Log.d("adjustCameraFocus ", "adjustCameraFocus");
+        long downTime = SystemClock.uptimeMillis();
+        long eventTime = SystemClock.uptimeMillis() + 100;
+
+        float x = previewView.getWidth()/2;
+        float y = (previewView.getHeight() - previewView.getHeight()/4);
+
+        Log.d("---", "X "+ x + "Y "+y);
+        int metaState = 0;
+        MotionEvent event = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, x, y, metaState);
+        MeteringPointFactory meteringPointFactory = new DisplayOrientedMeteringPointFactory(this.getDisplay(), camera.getCameraInfo(), previewView.getWidth(), previewView.getHeight());
+        MeteringPoint meteringPoint1 = meteringPointFactory.createPoint(event.getX(), event.getY());
+        FocusMeteringAction action = new FocusMeteringAction.Builder(meteringPoint1, FocusMeteringAction.FLAG_AF).setAutoCancelDuration(2, TimeUnit.SECONDS)
+                .build();
+        focusMeteringResultListenableFuture = camera.getCameraControl().startFocusAndMetering(action);
+
+        focusMeteringResultListenableFuture.addListener(() -> {
+            try {
+                FocusMeteringResult result = focusMeteringResultListenableFuture.get();
+                Log.d("isFocusSuccessful", ""+result.isFocusSuccessful());
+                // process the result
+            } catch (Exception e) {
+            }
+        } , ContextCompat.getMainExecutor(this));
+
+        float zoomR = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getZoomRatio();
+        camera.getCameraControl().setZoomRatio(zoomR * 1.2f);
         //animateFocusRing(event.getX(), event.getY());
+    }
+
+    private void adjustCameraFocus2() {
+        Log.d("CameraX", "adjustCameraFocus2");
+        previewView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if(event.getAction() == MotionEvent.ACTION_DOWN){
+                    MeteringPointFactory meteringPointFactory = previewView.getMeteringPointFactory();
+                    MeteringPoint meteringPoint = meteringPointFactory.createPoint(event.getX(), event.getY());
+                    FocusMeteringAction action = new FocusMeteringAction.Builder(meteringPoint).build();
+                    focusMeteringResultListenableFuture = camera.getCameraControl().startFocusAndMetering(action);
+
+                    focusMeteringResultListenableFuture.addListener(() -> {
+                        try {
+                            FocusMeteringResult result = focusMeteringResultListenableFuture.get();
+                            Log.d("isFocusSuccessful", ""+result.isFocusSuccessful());
+                            // process the result
+                        } catch (Exception e) {
+                            Log.d("CameraX", e.getMessage());
+                        }
+                    } , ContextCompat.getMainExecutor(activity));
+                    return true;
+                }
+                if(event.getAction() == MotionEvent.ACTION_UP){
+                    MeteringPointFactory meteringPointFactory = previewView.getMeteringPointFactory();
+                    MeteringPoint meteringPoint = meteringPointFactory.createPoint(event.getX(), event.getY());
+                    FocusMeteringAction action = new FocusMeteringAction.Builder(meteringPoint).build();
+                    focusMeteringResultListenableFuture = camera.getCameraControl().startFocusAndMetering(action);
+
+                    focusMeteringResultListenableFuture.addListener(() -> {
+                        try {
+                            FocusMeteringResult result = focusMeteringResultListenableFuture.get();
+                            Log.d("isFocusSuccessful", ""+result.isFocusSuccessful());
+                            // process the result
+                        } catch (Exception e) {
+                            Log.d("CameraX", e.getMessage());
+                        }
+                    } , ContextCompat.getMainExecutor(activity));
+                    return true;
+                }
+                return false;
+            }
+        });
+
     }
 
     /**
